@@ -1,19 +1,80 @@
 import numpy as np
 import pandas as pd
 import os
-pd.set_option('future.no_silent_downcasting', True)
+import yaml
+import logging
+from typing import Tuple
 from sklearn.model_selection import train_test_split
-# Load the dataset directly from a GitHub URL
-df = pd.read_csv('https://raw.githubusercontent.com/campusx-official/jupyter-masterclass/main/tweet_emotions.csv')
-# Remove the 'tweet_id' column as it's not needed for analysis
-df.drop(columns=['tweet_id'], inplace=True)
-# Filter the dataset to only include tweets labeled as 'happiness' or 'sadness'
-final_df = df[df['sentiment'].isin(['happiness', 'sadness'])].copy()  # Use .copy() to avoid SettingWithCopyWarning
-# Convert sentiment labels to binary: happiness=1, sadness=0
-final_df['sentiment'] = final_df['sentiment'].replace({'happiness': 1, 'sadness': 0})
-# Split the data into training and testing sets (80% train, 20% test)
-train_data, test_data = train_test_split(final_df, test_size=0.2, random_state=42)
-# Save the split datasets to CSV files in the 'data/raw' directory
-os.makedirs("data/raw", exist_ok=True)  # Ensure the directory exists   
-train_data.to_csv("data/raw/train.csv", index=False)
-test_data.to_csv("data/raw/test.csv", index=False)
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
+
+def load_params(params_path: str = "params.yaml") -> dict:
+    try:
+        with open(params_path, "r") as file:
+            params = yaml.safe_load(file)
+        logging.info(f"Parameters loaded from {params_path}")
+        return params
+    except Exception as e:
+        logging.error(f"Failed to load parameters: {e}")
+        raise
+
+def load_data(url: str) -> pd.DataFrame:
+    try:
+        df = pd.read_csv(url)
+        logging.info(f"Data loaded from {url} with shape {df.shape}")
+        return df
+    except Exception as e:
+        logging.error(f"Failed to load data from {url}: {e}")
+        raise
+
+def preprocess_data(df: pd.DataFrame) -> pd.DataFrame:
+    try:
+        df = df.drop(columns=['tweet_id'])
+        filtered_df = df[df['sentiment'].isin(['happiness', 'sadness'])].copy()
+        filtered_df['sentiment'] = filtered_df['sentiment'].replace({'happiness': 1, 'sadness': 0})
+        logging.info(f"Data filtered and sentiment encoded. Shape: {filtered_df.shape}")
+        return filtered_df
+    except Exception as e:
+        logging.error(f"Error during preprocessing: {e}")
+        raise
+
+def split_data(df: pd.DataFrame, test_size: float, random_state: int = 42) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    try:
+        train_data, test_data = train_test_split(df, test_size=test_size, random_state=random_state)
+        logging.info(f"Data split into train ({train_data.shape}) and test ({test_data.shape})")
+        return train_data, test_data
+    except Exception as e:
+        logging.error(f"Error during train-test split: {e}")
+        raise
+
+def save_data(train_data: pd.DataFrame, test_data: pd.DataFrame, output_dir: str = "data/raw") -> None:
+    try:
+        os.makedirs(output_dir, exist_ok=True)
+        train_path = os.path.join(output_dir, "train.csv")
+        test_path = os.path.join(output_dir, "test.csv")
+        train_data.to_csv(train_path, index=False)
+        test_data.to_csv(test_path, index=False)
+        logging.info(f"Train and test data saved to {output_dir}")
+    except Exception as e:
+        logging.error(f"Error saving data: {e}")
+        raise
+
+def main() -> None:
+    pd.set_option('future.no_silent_downcasting', True)
+    params = load_params()
+    test_size = params['data_ingestion']['test_size']
+    url = 'https://raw.githubusercontent.com/campusx-official/jupyter-masterclass/main/tweet_emotions.csv'
+    df = load_data(url)
+    final_df = preprocess_data(df)
+    train_data, test_data = split_data(final_df, test_size)
+    save_data(train_data, test_data)
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:
+        logging.critical(f"Pipeline failed: {e}")
